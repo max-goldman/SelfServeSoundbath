@@ -1,6 +1,6 @@
 # SelfServeSoundbath
 
-Background: The self serve soundbath is an audiovisual art installation. A 5.1 surround sound system has been installed into 
+Background: The self serve soundbath is an audiovisual art installation. A 5.1 surround sound system has been installed into a bathtub 
 
 Role: You are responsible for programming a Teensy 4.1 to act as a MIDI controller and lighting controller. You can govern the wiring to the Teensy as you need, there is no wiring diagram as of right now.
 Hardware setup is still underway, so testing is not an option right now, try to get the code right on the first try.

@@ -58,23 +58,27 @@ Zoned: Exists in 3 sections each with their own behavior
 ## Overall system Behavior:
 A mm wave sensor is polling for the presence of a person, the system will remain in an idle state until a disruption is detected, at which point the active state will trigger. as soon as the mm wave sensor stops detecting a person it will return to idle state. transition between states will include a delay of 4 seconds, meaning the sensor must detect or not detect something for 4 consecutive seconds before changing states
 
+There is a set of active default and passive default values for both the leds and the midi. 
+
+upon change of states from active back to passive, each midi and led value will not retain its value. meaning once the "session" is completed, the next session will not retain the prior sessions midi or led values and will start back at the active default
+
 ### Passive state
-- each midi is at its default value
-- each every led is set to its default value
+- none of the knobs should work in the passive state, not reading input
+- each midi is at its default passive value
+- each every led is set to its default passive value
 
-### Active state a
+### Transition function passive -> active
+- to be defined later
 
-1. On startup, there should be some sort of brief animation with the LEDs to verify functionality. Other than that, nothing is needed.
-2. After startup, the tub will only be in one of two states: Idle, or Active.
-3. The state change is governed by the presence sensor (mmWave or ToF undecided for now). 
-4. The sensor is mounted at the front of the tub under the faucet, with an adjustable line of sight across the tub towards the rear sloped section.
-5. If the sensor detects presence in the tub for more than 5 (or configurable) seconds
-6. normal relation of knob to LED: as the knob is turned it shifts from two compelemtary colors
+### Transition function active -> passive
+- to be defined later
 
+### Active state
 
+1. normal relation of knob to Midi and LED: as the knob is turned it shifts default values either larger or smaller and changed the corresponding leds as specified above
 
-## Desciption of states
+___
 
 ### other coding specs:
-- a file should be created that can control the default value for each knobs MIDI and LED number
+- a file should be created that can control the default value for each knobs MIDI and LED number. this will contain the passive state defaults and active state defaults
 - 

@@ -13,12 +13,43 @@ Teensy 4.1 - microcontroller
 - 14 generic EC11 detented rotary encoders, 20 detents - synth controlling knobs, button not needed
 - 2 Bournes PEC12R-4022 detentless rotary encoders - synth controlling knobs, button not needed
 - 3 runs of WS2812b LEDs - One is 48 LEDs long, one is ~180 LEDs long, and one is ~90 LEDs long
-- LD2410C mmWave sensor or VL53L1X ToF sensor (undecided, please write logic for both, comment out the ToF sensor) - for presence detection in tub
+- LD2410C mmWave sensor or VL53L1X ToF sensor (undecided, please write logic for both, comment out the ToF sensor) - for presence detection in tub. LD2410C is UART (Serial RX/TX), VL53L1X is I2C (SDA/SCL) - 2 pins either way
 - As many toggle switches as needed to fill the rest of the top GPIO inputs, for any mode changes on hidden control panels (lighting modes or any other nice toggle-able features you can think of)
 - 5v 20A power supply
 - The sound system agnostic
 - Mac running Logic is doing the audio synthesis, and is ready to configure around given MIDI controls from the Teensy.
 - The tub is 30x60in on the outside top, and tapers in to 18x40in on the bottom inside, with the front wall relatively flat and the back wall sloped.
+
+## Pin budget
+
+The Teensy 4.1 breaks out 42 breadboard-friendly digital I/O (pins 0-41). Pins 42-54 exist as surface pads on the bottom, but several are tied to the SD socket - don't plan on them.
+
+| Use | Pins |
+| --- | --- |
+| 16 encoders x 2 | 32 |
+| Presence sensor (Serial RX/TX, or SDA/SCL) | 2 |
+| WS2812b data, 3 runs | 3 |
+| **Used** | **37** |
+| **Free** | **5** |
+
+Those 5 pins cover toggle switches **and** any encoder push buttons - it is one shared pool, not 5 on top of the toggles.
+
+### Encoder push buttons
+
+Not in scope: both encoder types are specced button-not-needed and nothing in the state machine uses a press. If a function is ever named for them (per-knob reset to active default being the obvious one), do not wire them directly - 16 direct buttons do not fit.
+
+Options, cheapest first:
+- **MCP23017 on I2C** - 16 inputs for 2 pins, 3 left for toggles. Free if the VL53L1X path is chosen, since I2C is already up. A second chip covers the toggles on the same 2 pins.
+- **Resistor ladder on one analog pin** - all 16 on 1 pin, 4 left for toggles. No chip, but one press at a time, and the thresholds need a calibration table (see Calibration), not baked-in constants.
+- **Direct wiring** - 5 buttons max, zero toggles. A 2x3 matrix gets 6 for the same 5 pins plus 6 diodes; not worth it.
+
+Buttons are slow SPST-to-ground contacts, so polling an expander at ~100 Hz is fine. Encoders are not - they stay on real GPIO.
+
+### Pin assignment notes
+
+- All Teensy 4.x digital pins support interrupts, so encoder pins can go anywhere.
+- Keep the presence sensor on **Serial1 (pins 0/1)**. The mid-numbered pins (5-8, 14, 20/21) are the usual DMA parallel-output candidates for the LED driver, and Serial2/Serial3 sit in that same block.
+- Assign LED data pins explicitly in the config file rather than accepting a library default that may collide.
 
 ## Chain of command / order of operations:
 1. user moves of the rotary encoders

@@ -119,7 +119,7 @@ All 16 knobs send on channel 1, CC 102-117, one per knob, in the order below. 10
 
 ## Firmware
 
-v0 lives in seven files:
+v0 lives in eight files:
 - `config.h` - single source of truth: pin map, the 16-row knob table (CC number, encoder pins, LED indices, active/passive defaults, counts-per-full-range scaling), and the tuning constants
 - `mapping.h` - pure encoder/color math, shared by the firmware and its host test
 - `leds.h` / `leds.cpp` - OctoWS2811 DMA output and the per-zone renderers

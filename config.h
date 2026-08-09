@@ -118,8 +118,8 @@ constexpr KnobConfig KNOBS[KNOB_COUNT] = {
 // Set to 1 to bypass the presence sensor for bench testing
 [[maybe_unused]] constexpr uint8_t FORCE_ACTIVE = 0;
 
-// MIDI channel (0-based; 0 = channel 1)
-[[maybe_unused]] constexpr uint8_t MIDI_CHANNEL = 0;
+// MIDI channel (1-based, matches usbMIDI.sendControlChange's channel arg; valid range 1..16)
+[[maybe_unused]] constexpr uint8_t MIDI_CHANNEL = 1;
 
 // LED refresh interval (~60 Hz render) (ms)
 [[maybe_unused]] constexpr uint16_t LED_FRAME_INTERVAL_MS = 16;
@@ -173,11 +173,41 @@ static_assert(KNOBS[13].cc == 115);
 static_assert(KNOBS[14].cc == 116);
 static_assert(KNOBS[15].cc == 117);
 
-// Verify encoder pins are distinct and don't collide with LED/control pins
-// Encoder pins by knob: (9,10) (11,12) (14,15) (16,17) (18,19) (20,21) (22,23) (24,25)
-//                       (26,27) (28,29) (30,31) (32,33) (34,35) (36,37) (38,39) (40,41)
-// Reserved pins: 2, 3, 4, 5, 6, 7, 8, 13 (and 0, 1 for Serial1)
-// All other pins from 9-41 used as encoder pins, no collisions
+// Verify encoder pins are distinct and don't collide with LED/control pins.
+// constexpr helper walks the pin list pairwise; this runs only at compile
+// time, so it is not the runtime validation function the brief forbids.
+constexpr bool allPinsDistinct(const uint8_t* pins, int count) {
+  for (int i = 0; i < count; ++i) {
+    for (int j = i + 1; j < count; ++j) {
+      if (pins[i] == pins[j]) return false;
+    }
+  }
+  return true;
+}
+
+constexpr uint8_t GUARDED_PINS[] = {
+  KNOBS[0].pinA,  KNOBS[0].pinB,
+  KNOBS[1].pinA,  KNOBS[1].pinB,
+  KNOBS[2].pinA,  KNOBS[2].pinB,
+  KNOBS[3].pinA,  KNOBS[3].pinB,
+  KNOBS[4].pinA,  KNOBS[4].pinB,
+  KNOBS[5].pinA,  KNOBS[5].pinB,
+  KNOBS[6].pinA,  KNOBS[6].pinB,
+  KNOBS[7].pinA,  KNOBS[7].pinB,
+  KNOBS[8].pinA,  KNOBS[8].pinB,
+  KNOBS[9].pinA,  KNOBS[9].pinB,
+  KNOBS[10].pinA, KNOBS[10].pinB,
+  KNOBS[11].pinA, KNOBS[11].pinB,
+  KNOBS[12].pinA, KNOBS[12].pinB,
+  KNOBS[13].pinA, KNOBS[13].pinB,
+  KNOBS[14].pinA, KNOBS[14].pinB,
+  KNOBS[15].pinA, KNOBS[15].pinB,
+  PIN_LED_ZONED, PIN_LED_GENERAL_A, PIN_LED_GENERAL_B,
+  PIN_TOGGLE_DAYNIGHT, PIN_HEARTBEAT,
+};
+
+static_assert(allPinsDistinct(GUARDED_PINS, sizeof(GUARDED_PINS) / sizeof(GUARDED_PINS[0])),
+              "encoder pins must be distinct and not collide with LED/control pins");
 
 // Verify all defaults are valid MIDI values (0..127)
 static_assert(KNOBS[0].activeDefault <= 127);

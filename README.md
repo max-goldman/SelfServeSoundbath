@@ -81,6 +81,8 @@ What's still free: pin 13 is kept free of the encoder/toggle pool for the heartb
 
 v0 wires exactly one: day/night, on pin 5. Daytime multiplies every LED value by 0.5. Pins 6-8 are reserved but unimplemented, so the "as many toggle switches as needed... for any mode changes" note above is otherwise not built yet.
 
+Polarity: pin 5 is `INPUT_PULLUP`, and the switch closed to ground (reading `LOW`) means daytime. An installer wiring or labeling the switch by feel should treat closed/grounded as day, open as night.
+
 ### Pin assignment notes
 
 - All Teensy 4.x digital pins support interrupts, so encoder pins can go anywhere.
@@ -117,15 +119,17 @@ All 16 knobs send on channel 1, CC 102-117, one per knob, in the order below. 10
 
 ## Firmware
 
-v0 lives in six files:
+v0 lives in seven files:
 - `config.h` - single source of truth: pin map, the 16-row knob table (CC number, encoder pins, LED indices, active/passive defaults, counts-per-full-range scaling), and the tuning constants
 - `mapping.h` - pure encoder/color math, shared by the firmware and its host test
 - `leds.h` / `leds.cpp` - OctoWS2811 DMA output and the per-zone renderers
 - `presence.h` / `presence.cpp` - LD2410C live, VL53L1X compiled out behind one interface
 - `SelfServeSoundbath.ino` - the 16 encoders, MIDI CC out, and the idle/active state machine
+- `test/test_mapping.cpp` - host-side test for `mapping.h`'s pure math, no hardware needed
 
 Build:
 ```
+arduino-cli lib install ld2410
 arduino-cli compile --fqbn teensy:avr:teensy41:usb=midi .
 ```
 
@@ -135,6 +139,8 @@ c++ -std=c++17 test/test_mapping.cpp -o /tmp/t && /tmp/t
 ```
 
 **Tools → USB Type must be a MIDI-capable mode** (`MIDI` or `Serial + MIDI`) in the Arduino IDE, or `usbMIDI.*` compiles fine and silently does nothing.
+
+Flipping `presence.cpp`'s `PRESENCE_SENSOR_LD2410` to `0` switches to the VL53L1X path, which needs the Pololu `VL53L1X` library installed (`arduino-cli lib install "VL53L1X"`) and has never been compiled or bench-tested — the LD2410C is the live, verified path.
 
 ## Lighting
 
@@ -158,6 +164,10 @@ The three runs are three separate data pins. The 48-LED zoned run is one daisy c
 The ~180 and ~90 runs are the general lighting. The jet panel's special knob gets 3 LEDs like the other four, which is what makes the jet panel 15 LEDs and the zoned total 48.
 
 Faucet panel letter-to-index mapping: a=39, b=40, c=41, d=42, e=43, f=44, g=45, h=46, i=47.
+
+### Power budget
+
+`config.h`'s `LED_BRIGHTNESS_CEILING` (0..255, currently 96) is a **safety limit** against the 5V 20A supply, not an aesthetic choice: all ~318 LEDs across the three runs at full white would draw roughly 19A, which leaves almost no headroom. Do not raise the ceiling without measuring actual current draw with a clamp meter on the bench.
 
 ### Zone 1 - Aux panel (two of these)
 - each aux panel contains 4 knobs, each knob controls its own 3 leds

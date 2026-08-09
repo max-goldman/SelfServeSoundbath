@@ -23,7 +23,9 @@
 // Heartbeat LED (onboard)
 [[maybe_unused]] constexpr uint8_t PIN_HEARTBEAT = 13;
 
-// Serial1 (RX1/TX1) for LD2410C mmWave on pins 0, 1 (defined by Teensy)
+// Serial1 (RX1/TX1) for LD2410C mmWave
+[[maybe_unused]] constexpr uint8_t PIN_SERIAL1_RX = 0;
+[[maybe_unused]] constexpr uint8_t PIN_SERIAL1_TX = 1;
 
 // ============================================================================
 // LED Run Configuration
@@ -115,6 +117,15 @@ constexpr KnobConfig KNOBS[KNOB_COUNT] = {
 // does not start a session (cm)
 [[maybe_unused]] constexpr uint8_t LD2410_MAX_DISTANCE_CM = 120;
 
+// How long presence_detected() trusts the LD2410's last-parsed-frame fields
+// before treating the sensor as dead (ms). Generous on purpose: the sensor's
+// own isConnected() times out at 100 ms against a ~100 ms frame rate and
+// produces spurious false readings, which is worse (a spurious false while
+// passive resets the 4-second wake debounce). This window instead guards
+// against a genuinely dead/unplugged sensor latching presence_detected() at
+// its last answer forever.
+[[maybe_unused]] constexpr uint16_t LD2410_STALE_MS = 2000;
+
 // Set to 1 to bypass the presence sensor for bench testing
 [[maybe_unused]] constexpr uint8_t FORCE_ACTIVE = 0;
 
@@ -204,6 +215,8 @@ constexpr uint8_t GUARDED_PINS[] = {
   KNOBS[15].pinA, KNOBS[15].pinB,
   PIN_LED_ZONED, PIN_LED_GENERAL_A, PIN_LED_GENERAL_B,
   PIN_TOGGLE_DAYNIGHT, PIN_HEARTBEAT,
+  PIN_SERIAL1_RX, PIN_SERIAL1_TX,
+  PIN_TOGGLE_RESERVED_6, PIN_TOGGLE_RESERVED_7, PIN_TOGGLE_RESERVED_8,
 };
 
 static_assert(allPinsDistinct(GUARDED_PINS, sizeof(GUARDED_PINS) / sizeof(GUARDED_PINS[0])),

@@ -145,31 +145,54 @@ static void updateStateMachine(uint32_t now) {
 
 static void scanEncoders() {
   for (uint8_t i = 0; i < KNOB_COUNT; ++i) {
-    int32_t counts = encoders[i].read();
+    int32_t raw = encoders[i].read();
+    int32_t counts = raw;
     if (counts < 0) counts = 0;
     if (counts > KNOBS[i].countsPerFullRange) counts = KNOBS[i].countsPerFullRange;
-    encoders[i].write(counts);  // write back the clamp, or the knob "sticks"
+    // Only write back when the clamp actually changed something. read() and
+    // write() each open their own critical section, so an unconditional
+    // write-back on every loop iteration can stomp an edge that lands
+    // between them; skipping the write when counts == raw removes that race
+    // for the 99% case where the knob isn't sitting at a rail.
+    if (counts != raw) encoders[i].write(counts);
     sendCC(i, countsToCC(counts, KNOBS[i].countsPerFullRange));
   }
 }
 
 // ============================================================================
 // Heartbeat — pin 13, ~1 Hz, so "is the loop even running" is a glance away.
+//
+// There is no Serial output anywhere in this firmware, so this LED is the
+// only diagnostic channel an installer has. When presence_begin() failed at
+// boot, the pattern switches to a fast double-blink (on/off/on/pause) —
+// a different rhythm, not just a faster rate, so it reads as distinct from
+// the normal steady beat at a glance instead of needing a stopwatch.
 // ============================================================================
 
-static void updateHeartbeat(uint32_t now) {
+static void updateHeartbeat(uint32_t now, bool presenceOk) {
   static uint32_t last = 0;
-  static bool on = false;
-  if ((uint32_t)(now - last) >= 500) {
+  static uint8_t step = 0;
+  static const uint16_t NORMAL_PATTERN[] = {500, 500};
+  static const uint16_t FAIL_PATTERN[] = {100, 100, 100, 700};
+  const uint16_t* pattern = presenceOk ? NORMAL_PATTERN : FAIL_PATTERN;
+  const uint8_t patternLen = presenceOk ? 2 : 4;
+
+  if (step >= patternLen) step = 0;  // in case presenceOk's pattern is shorter
+  if ((uint32_t)(now - last) >= pattern[step]) {
     last = now;
-    on = !on;
-    digitalWrite(PIN_HEARTBEAT, on ? HIGH : LOW);
+    step = (step + 1) % patternLen;
+    digitalWrite(PIN_HEARTBEAT, (step % 2) ? LOW : HIGH);
   }
 }
 
 // ============================================================================
 // setup / loop
 // ============================================================================
+
+// Set once in setup() from presence_begin()'s return value; read by the
+// heartbeat to pick its blink pattern. The sensor is never re-initialized
+// after boot, so this doesn't need to be revisited in loop().
+static bool presenceOk = true;
 
 void setup() {
   for (uint8_t i = 0; i < KNOB_COUNT; ++i) currentCC[i] = 255;  // force initial sends
@@ -178,7 +201,7 @@ void setup() {
   pinMode(PIN_HEARTBEAT, OUTPUT);
 
   leds_begin();
-  presence_begin();
+  presenceOk = presence_begin();
 
   enterPassive();  // boot state: passive, primes MIDI + LEDs at their defaults
 }
@@ -188,7 +211,7 @@ void loop() {
 
   usbMIDI.read();  // drain inbound; required even though we ignore it
 
-  updateHeartbeat(now);
+  updateHeartbeat(now, presenceOk);
   updateStateMachine(now);
 
   if (state == ACTIVE) {

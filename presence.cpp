@@ -33,15 +33,30 @@
 namespace {
 constexpr uint32_t LD2410_BAUD = 256000;
 ld2410 radar;
+uint32_t lastGoodMs = 0;
 }  // namespace
 
 bool presence_begin() {
   Serial1.begin(LD2410_BAUD);
-  return radar.begin(Serial1);  // false unless the sensor actually answers
+  bool ok = radar.begin(Serial1);  // false unless the sensor actually answers
+  lastGoodMs = millis();  // don't start already-stale before the first read
+  return ok;
 }
 
 bool presence_detected() {
-  radar.read();  // pump incoming serial bytes; never blocks
+  // ld2410::read() (src/ld2410.cpp) pumps the UART and returns
+  // `new_data || frame_processed` — true if any bytes arrived at all, not
+  // strictly "a frame parsed." That's still the right staleness signal for
+  // the failure this guards against: a popped cable stops bytes arriving
+  // entirely, so read() goes false and stays false. It only under-detects a
+  // sensor that's connected but emitting nothing but noise, which is not the
+  // field failure mode this fix targets.
+  if (radar.read()) {
+    lastGoodMs = millis();
+  }
+  if ((uint32_t)(millis() - lastGoodMs) > LD2410_STALE_MS) {
+    return false;  // dead/disconnected sensor: don't latch on stale fields
+  }
 
   bool stationary = radar.stationaryTargetDetected() &&
                      radar.stationaryTargetDistance() <= LD2410_MAX_DISTANCE_CM;

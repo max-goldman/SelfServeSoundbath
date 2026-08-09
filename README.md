@@ -45,6 +45,42 @@ Options, cheapest first:
 
 Buttons are slow SPST-to-ground contacts, so polling an expander at ~100 Hz is fine. Encoders are not - they stay on real GPIO.
 
+### Pin assignments
+
+The category table above says how many pins go where; this is the actual map, from `config.h`.
+
+| Pin(s) | Use |
+| --- | --- |
+| 0, 1 | presence sensor - Serial1 RX/TX (LD2410C) |
+| 2 | LED data - zoned run (48 LEDs) |
+| 3 | LED data - general run A (~180 LEDs) |
+| 4 | LED data - general run B (~90 LEDs) |
+| 5 | day/night toggle |
+| 6, 7, 8 | reserved - undefined in v0 |
+| 9, 10 | encoder - aux panel A, knob 1 |
+| 11, 12 | encoder - aux panel A, knob 2 |
+| 13 | heartbeat LED (onboard) |
+| 14, 15 | encoder - aux panel A, knob 3 |
+| 16, 17 | encoder - aux panel A, knob 4 |
+| 18, 19 | encoder - aux panel B, knob 1 |
+| 20, 21 | encoder - aux panel B, knob 2 |
+| 22, 23 | encoder - aux panel B, knob 3 |
+| 24, 25 | encoder - aux panel B, knob 4 |
+| 26, 27 | encoder - jet panel, knob 1 |
+| 28, 29 | encoder - jet panel, knob 2 |
+| 30, 31 | encoder - jet panel, knob 3 |
+| 32, 33 | encoder - jet panel, knob 4 |
+| 34, 35 | encoder - jet panel, special (black->white) knob |
+| 36, 37 | encoder - faucet panel, alpha (cold) |
+| 38, 39 | encoder - faucet panel, beta (hot) |
+| 40, 41 | encoder - faucet panel, gamma |
+
+What's still free: pin 13 is kept free of the encoder/toggle pool for the heartbeat LED; pins 6-8 are reserved for toggles the spec doesn't define yet; and the 13 bottom surface pads (42-54) remain further headroom, with the existing caveat that several are tied to the SD socket.
+
+### Toggle switches
+
+v0 wires exactly one: day/night, on pin 5. Daytime multiplies every LED value by 0.5. Pins 6-8 are reserved but unimplemented, so the "as many toggle switches as needed... for any mode changes" note above is otherwise not built yet.
+
 ### Pin assignment notes
 
 - All Teensy 4.x digital pins support interrupts, so encoder pins can go anywhere.
@@ -56,6 +92,50 @@ Buttons are slow SPST-to-ground contacts, so polling an expander at ~100 Hz is f
 2. rotary encoder change leads to its corresponding midi signal output
 3. rotary encoder change effects its corresponding LED behavior
 
+## MIDI CC map
+
+All 16 knobs send on channel 1, CC 102-117, one per knob, in the order below. 102-117 are undefined in the MIDI spec, so nothing in Logic claims them by accident.
+
+| CC | Knob |
+| --- | --- |
+| 102 | aux panel A, knob 1 |
+| 103 | aux panel A, knob 2 |
+| 104 | aux panel A, knob 3 |
+| 105 | aux panel A, knob 4 |
+| 106 | aux panel B, knob 1 |
+| 107 | aux panel B, knob 2 |
+| 108 | aux panel B, knob 3 |
+| 109 | aux panel B, knob 4 |
+| 110 | jet panel, knob 1 |
+| 111 | jet panel, knob 2 |
+| 112 | jet panel, knob 3 |
+| 113 | jet panel, knob 4 |
+| 114 | jet panel, special black->white knob |
+| 115 | faucet panel, alpha (cold) |
+| 116 | faucet panel, beta (hot) |
+| 117 | faucet panel, gamma |
+
+## Firmware
+
+v0 lives in six files:
+- `config.h` - single source of truth: pin map, the 16-row knob table (CC number, encoder pins, LED indices, active/passive defaults, counts-per-full-range scaling), and the tuning constants
+- `mapping.h` - pure encoder/color math, shared by the firmware and its host test
+- `leds.h` / `leds.cpp` - OctoWS2811 DMA output and the per-zone renderers
+- `presence.h` / `presence.cpp` - LD2410C live, VL53L1X compiled out behind one interface
+- `SelfServeSoundbath.ino` - the 16 encoders, MIDI CC out, and the idle/active state machine
+
+Build:
+```
+arduino-cli compile --fqbn teensy:avr:teensy41:usb=midi .
+```
+
+Host test (pure math, no hardware needed):
+```
+c++ -std=c++17 test/test_mapping.cpp -o /tmp/t && /tmp/t
+```
+
+**Tools → USB Type must be a MIDI-capable mode** (`MIDI` or `Serial + MIDI`) in the Arduino IDE, or `usbMIDI.*` compiles fine and silently does nothing.
+
 ## Lighting
 
 This project has two kinds of lighting: general and zoned
@@ -64,12 +144,28 @@ General: These lights respond generally to a combination of all rotary encoder i
 
 Zoned: Exists in 3 sections each with their own behavior
 
+### LED run topology
+
+The three runs are three separate data pins. The 48-LED zoned run is one daisy chain covering all three zones, addressed by index range:
+
+| Section | Indices |
+| --- | --- |
+| aux panel A | 0-11 |
+| aux panel B | 12-23 |
+| jet panel | 24-38 |
+| faucet panel | 39-47 |
+
+The ~180 and ~90 runs are the general lighting. The jet panel's special knob gets 3 LEDs like the other four, which is what makes the jet panel 15 LEDs and the zoned total 48.
+
+Faucet panel letter-to-index mapping: a=39, b=40, c=41, d=42, e=43, f=44, g=45, h=46, i=47.
+
 ### Zone 1 - Aux panel (two of these)
 - each aux panel contains 4 knobs, each knob controls its own 3 leds
 - total of 12 lights per panel
 - each knobs 3 led matrix will represent the state of the knob with a corresponiding color intensity that correlates to the status of the knob
 - knob default will be midi intensity 63/127
 - default color will the midpoint of two complimentary colors and as the knob turns each direction will make the color of the leds gravitate towards one of the primary colors. example: all the way left is yellow, all the way right is blue, midpoint is green with shifting intensity
+- this interpolation is over hue, not a straight RGB blend: a straight RGB blend from yellow to blue passes through grey at the midpoint, while a hue sweep passes through green, which is the behavior the example above describes
 
 ### Zone 2 - Jet panel
 - jet panel has 5 knobs, 4 of which behave exactly like described in zone 1
@@ -84,6 +180,9 @@ Zoned: Exists in 3 sections each with their own behavior
 - knob gamma will control lights f,g,h,i
 - the lights will correspond to the left right direction of knob turns, splitting in the middle and indicating knob direction with their brightness
 - as knob gamma turns more to the right it will increase the brightness of lights h and i and decrease the colors of f and g and vice versa
+- gamma's f, g, h, i are white. all four sit at half brightness at center; turning right ramps h,i toward full while f,g fade toward off, and turning left mirrors it
+- alpha and beta default to 63/127 each, so light a rests at half blue, light b at half red, and c, d, e show a balanced blue -> purple -> red blend
+- lights c, d, e are an RGB blend of a's and b's colors at 25%, 50%, and 75% - so c sits nearest a and e nearest b, as above
 
 
 ## Overall system Behavior:
@@ -95,14 +194,22 @@ upon change of states from active back to passive, each midi and led value will 
 
 ### Passive state
 - none of the knobs should work in the passive state, not reading input
-- each midi is at its default passive value
-- each every led is set to its default passive value
+- each midi is at its default passive value: 0, for all 16 knobs. this default is per-knob in the config file, and v0 sets it to 0 across the board because some synth parameters sound broken rather than quiet at zero - those are expected to be retuned there with Logic open
+- zoned LEDs (aux, jet, faucet panels) are off; general lighting (the ~180 and ~90 runs) slow-breathes at ~10% of the brightness ceiling
 
 ### Transition function passive -> active
-- to be defined later
+v0's transition is an instant snap in both directions - no fade, no ramp. Passive -> active:
+- every encoder counter is re-seeded from its knob's active default, discarding whatever accumulated while idle
+- all 16 CCs are sent
+- the zoned LEDs wake
 
 ### Transition function active -> passive
-- to be defined later
+Also an instant snap. Active -> passive:
+- all 16 CCs are sent at their passive defaults
+- the zoned LEDs go dark
+- the general runs drop to the slow breathe
+
+Every CC leaves through a single send function, so replacing the snap with an eventual "LEDs snap, MIDI crossfades" transition is a change in one place rather than a rewrite - worth keeping in mind if that's ever wanted.
 
 ### Active state
 
